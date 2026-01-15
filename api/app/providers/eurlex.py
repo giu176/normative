@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List
 
+from sqlalchemy.orm import Session
+
+from app.ingestion.mapping import apply_mapping
+
 
 PROVIDER_NAME = "eurlex"
 
@@ -18,6 +22,8 @@ def fetch_changes(since: datetime | None) -> List[Dict[str, Any]]:
             "authority": "EU",
             "identifier": "CELEX:32016R0679",
             "primary_discipline_id": None,
+            "categories": ["privacy", "data protection"],
+            "keywords": ["GDPR", "personal data"],
         }
     ]
 
@@ -32,11 +38,13 @@ def get_details(external_id: str) -> Dict[str, Any]:
         "authority": "EU",
         "identifier": "CELEX:32016R0679",
         "primary_discipline_id": None,
+        "categories": ["privacy", "data protection"],
+        "keywords": ["GDPR", "personal data"],
     }
 
 
-def normalize(record: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+def normalize(record: Dict[str, Any], db: Session | None = None) -> Dict[str, Any]:
+    normalized = {
         "external_id": record["external_id"],
         "work": {
             "authority": record["authority"],
@@ -51,7 +59,10 @@ def normalize(record: Dict[str, Any]) -> Dict[str, Any]:
             "source_canonical_url": record.get("source_url"),
         },
         "relations": [],
+        "categories": record.get("categories", []),
+        "keywords": record.get("keywords", []),
     }
+    return apply_mapping(normalized, db=db)
 
 
 def match_and_merge(candidate: Dict[str, Any]) -> Dict[str, Any]:
