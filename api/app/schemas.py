@@ -199,3 +199,13 @@ class IngestionStatus(ORMBase):
     last_run_at: Optional[datetime] = None
     last_provider: Optional[str] = None
     status: str = "idle"
+
+
+class IngestionRunOut(ORMBase):
+    id: int
+    provider: str
+    status: str
+    started_at: datetime
+    finished_at: Optional[datetime]
+    error_message: Optional[str]
+    records_imported: int

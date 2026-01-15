@@ -206,3 +206,4 @@ class IngestionRun(Base):
     started_at = Column(DateTime, nullable=False, server_default=func.now())
     finished_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+    records_imported = Column(Integer, nullable=False, default=0)

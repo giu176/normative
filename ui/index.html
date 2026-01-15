@@ -309,6 +309,28 @@
         color: #991b1b;
       }
 
+      .metric-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .metric {
+        background: #f8fafc;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .metric-value {
+        font-weight: 600;
+        margin-top: 4px;
+      }
+
+      .metric-value.error {
+        color: var(--danger);
+      }
+
       @media (max-width: 960px) {
         .shell {
           grid-template-columns: 1fr;
@@ -603,7 +625,35 @@
               <span class="muted" id="ingestion-last-run">Ultima esecuzione: -</span>
               <span class="muted" id="ingestion-provider-label">Provider: -</span>
             </div>
+            <div class="divider"></div>
+            <h3>Ultimo run</h3>
+            <div class="metric-grid">
+              <div class="metric">
+                <div class="muted">Avviato</div>
+                <div class="metric-value" id="ingestion-run-started">-</div>
+              </div>
+              <div class="metric">
+                <div class="muted">Durata</div>
+                <div class="metric-value" id="ingestion-run-duration">-</div>
+              </div>
+              <div class="metric">
+                <div class="muted">Record importati</div>
+                <div class="metric-value" id="ingestion-run-records">-</div>
+              </div>
+              <div class="metric">
+                <div class="muted">Errore</div>
+                <div class="metric-value" id="ingestion-run-error">-</div>
+              </div>
+            </div>
             <div class="status" id="ingestion-message"></div>
+          </div>
+
+          <div class="card">
+            <h2>Storico ingestion</h2>
+            <p class="muted" style="margin-top: 4px;">
+              Ultimi run registrati nel database.
+            </p>
+            <div id="ingestion-history"></div>
           </div>
 
           <div class="card">
@@ -714,6 +764,30 @@
       function parseDateTime(value) {
         if (!value) return null;
         return new Date(value).toISOString();
+      }
+
+      function formatDateTimeDisplay(value) {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString("it-IT");
+      }
+
+      function formatDuration(startedAt, finishedAt) {
+        if (!startedAt || !finishedAt) return "-";
+        const start = new Date(startedAt);
+        const end = new Date(finishedAt);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+        let seconds = Math.max(0, Math.floor((end - start) / 1000));
+        const hours = Math.floor(seconds / 3600);
+        seconds -= hours * 3600;
+        const minutes = Math.floor(seconds / 60);
+        seconds -= minutes * 60;
+        const parts = [];
+        if (hours) parts.push(`${hours}h`);
+        if (minutes || hours) parts.push(`${minutes}m`);
+        parts.push(`${seconds}s`);
+        return parts.join(" ");
       }
 
       function buildFilters(prefix) {
@@ -1201,17 +1275,80 @@
 
       async function loadIngestionStatus() {
         try {
-          const status = await fetchJSON("/api/ingestion/status");
-          qs("#ingestion-last-run").textContent = `Ultima esecuzione: ${
-            status.last_run_at || "-"
-          }`;
-          qs("#ingestion-provider-label").textContent = `Provider: ${
-            status.last_provider || "-"
-          }`;
-          showStatusChip(qs("#ingestion-status"), status.status || "idle");
+          const runs = await fetchJSON("/api/ingestion/runs");
+          const latest = runs[0];
+          if (latest) {
+            qs("#ingestion-last-run").textContent = `Ultima esecuzione: ${formatDateTimeDisplay(
+              latest.started_at
+            )}`;
+            qs("#ingestion-provider-label").textContent = `Provider: ${latest.provider || "-"}`;
+            qs("#ingestion-run-started").textContent = formatDateTimeDisplay(latest.started_at);
+            qs("#ingestion-run-duration").textContent = formatDuration(
+              latest.started_at,
+              latest.finished_at
+            );
+            qs("#ingestion-run-records").textContent =
+              latest.records_imported ?? "-";
+            const errorField = qs("#ingestion-run-error");
+            errorField.textContent = latest.error_message || "Nessun errore";
+            errorField.classList.toggle("error", Boolean(latest.error_message));
+            showStatusChip(qs("#ingestion-status"), latest.status || "idle");
+          } else {
+            qs("#ingestion-last-run").textContent = "Ultima esecuzione: -";
+            qs("#ingestion-provider-label").textContent = "Provider: -";
+            qs("#ingestion-run-started").textContent = "-";
+            qs("#ingestion-run-duration").textContent = "-";
+            qs("#ingestion-run-records").textContent = "-";
+            qs("#ingestion-run-error").textContent = "-";
+            qs("#ingestion-run-error").classList.remove("error");
+            showStatusChip(qs("#ingestion-status"), "idle");
+          }
+          renderIngestionHistory(runs);
         } catch (error) {
           setStatus(qs("#ingestion-message"), error.message);
         }
+      }
+
+      function renderIngestionHistory(runs) {
+        const container = qs("#ingestion-history");
+        if (!runs.length) {
+          container.innerHTML = '<div class="empty">Nessun run registrato.</div>';
+          return;
+        }
+        container.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Avvio</th>
+                <th>Fine</th>
+                <th>Durata</th>
+                <th>Record</th>
+                <th>Errore</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${runs
+                .map(
+                  (run) => `
+                  <tr>
+                    <td>#${run.id}</td>
+                    <td>${run.provider}</td>
+                    <td>${run.status}</td>
+                    <td>${formatDateTimeDisplay(run.started_at)}</td>
+                    <td>${formatDateTimeDisplay(run.finished_at)}</td>
+                    <td>${formatDuration(run.started_at, run.finished_at)}</td>
+                    <td>${run.records_imported ?? "-"}</td>
+                    <td>${run.error_message || "-"}</td>
+                  </tr>
+                `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
       }
 
       async function runIngestion() {
