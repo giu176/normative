@@ -276,9 +276,9 @@ def init_centralized_db(db_path: Path) -> None:
         connection.commit()
 
 
-def list_centralized_normative(db_path: Path) -> list[sqlite3.Row]:
+def list_centralized_normative(db_path: Path) -> list[sqlite3.Row | dict[str, str]]:
     with get_connection(db_path) as connection:
-        return connection.execute(
+        normative_rows = connection.execute(
             """
             SELECT norme_metadata.id,
                    norme_metadata.titolo,
@@ -298,6 +298,42 @@ def list_centralized_normative(db_path: Path) -> list[sqlite3.Row]:
             ORDER BY datetime(norme_metadata.created_at) DESC
             """
         ).fetchall()
+        if normative_rows:
+            return normative_rows
+
+        public_sources = connection.execute(
+            """
+            SELECT nome,
+                   ente,
+                   url,
+                   copertura,
+                   paese,
+                   licenza,
+                   note
+            FROM fonti_pubbliche
+            ORDER BY nome ASC
+            """
+        ).fetchall()
+        fallback_rows: list[dict[str, str]] = []
+        for source in public_sources:
+            note_parts = [part for part in (source["licenza"], source["note"]) if part]
+            fallback_rows.append(
+                {
+                    "titolo": source["nome"],
+                    "ente": source["ente"],
+                    "codice": "",
+                    "categoria": source["copertura"],
+                    "paese": source["paese"],
+                    "data_pubblicazione": "",
+                    "data_ultimo_aggiornamento": "",
+                    "url": source["url"],
+                    "note": " - ".join(note_parts),
+                    "fonte_nome": "Fonte pubblica",
+                    "fonte_ente": "",
+                    "fonte_url": source["url"],
+                }
+            )
+        return fallback_rows
 
 
 def _seed_public_sources(connection: sqlite3.Connection) -> None:
