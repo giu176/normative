@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import hashlib
+import json
 from pathlib import Path
 from typing import Dict, List, Sequence
 from uuid import uuid4
@@ -20,6 +22,7 @@ from app.models import (
     LocalAttachment,
     NormativeList,
     NormativeListItem,
+    SourceRecord,
     UserTag,
     WorkDiscipline,
     WorkTag,
@@ -47,6 +50,7 @@ from app.schemas import (
     WorkOut,
     WorkUpdate,
 )
+from app.providers import get_provider
 
 Base.metadata.create_all(bind=engine)
 
@@ -833,13 +837,188 @@ def delete_attachment(attachment_id: int, db: Session = Depends(get_db)) -> dict
 
 
 @app.post("/api/ingestion/run")
-def run_ingestion(provider: str = Query(...)) -> dict[str, str]:
+def run_ingestion(
+    provider: str = Query(...), db: Session = Depends(get_db)
+) -> dict[str, str | int]:
+    try:
+        provider_module = get_provider(provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    since = _ingestion_status.last_run_at
     _ingestion_status.last_run_at = datetime.utcnow()
     _ingestion_status.last_provider = provider
-    _ingestion_status.status = "queued"
-    return {"status": "queued", "provider": provider}
+    _ingestion_status.status = "running"
+
+    records = provider_module.fetch_changes(since)
+    ingested = 0
+    try:
+        for record in records:
+            normalized = provider_module.normalize(record)
+            candidate = provider_module.match_and_merge(normalized)
+            work_payload = candidate["work"]
+            edition_payload = candidate["edition"]
+            external_id = candidate["external_id"]
+
+            work = _upsert_work(db, work_payload)
+            edition = _upsert_edition(db, work, edition_payload)
+
+            payload_hash = _payload_hash(record)
+            raw_reference = edition_payload.get("source_canonical_url")
+            _upsert_source_record(
+                db,
+                provider=provider,
+                external_id=external_id,
+                payload_hash=payload_hash,
+                raw_reference=raw_reference,
+                work_id=work.id,
+                edition_id=edition.id,
+            )
+
+            for relation in candidate.get("relations", []):
+                to_external_id = relation.get("to_external_id")
+                if not to_external_id:
+                    continue
+                target_source = (
+                    db.query(SourceRecord)
+                    .filter(
+                        SourceRecord.provider == provider,
+                        SourceRecord.external_id == to_external_id,
+                    )
+                    .first()
+                )
+                if not target_source or not target_source.edition_id:
+                    continue
+                exists = (
+                    db.query(EditionRelation)
+                    .filter(
+                        EditionRelation.from_edition_id == edition.id,
+                        EditionRelation.to_edition_id == target_source.edition_id,
+                        EditionRelation.type == relation.get("type", "related"),
+                    )
+                    .first()
+                )
+                if exists:
+                    continue
+                db.add(
+                    EditionRelation(
+                        from_edition_id=edition.id,
+                        to_edition_id=target_source.edition_id,
+                        type=relation.get("type", "related"),
+                        confidence=relation.get("confidence", 1.0),
+                        source=relation.get("source"),
+                    )
+                )
+            ingested += 1
+        db.commit()
+        _ingestion_status.status = "completed"
+    except Exception:
+        db.rollback()
+        _ingestion_status.status = "failed"
+        raise
+
+    return {"status": _ingestion_status.status, "provider": provider, "ingested": ingested}
 
 
 @app.get("/api/ingestion/status", response_model=IngestionStatus)
 def ingestion_status() -> IngestionStatus:
     return _ingestion_status
+
+
+def _parse_date(value: date | str | None) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value:
+        return date.fromisoformat(value)
+    return None
+
+
+def _payload_hash(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _upsert_work(db: Session, payload: dict) -> DocumentWork:
+    work = (
+        db.query(DocumentWork)
+        .filter(DocumentWork.identifier == payload["identifier"])
+        .first()
+    )
+    if work:
+        work.authority = payload["authority"]
+        work.title = payload["title"]
+        work.primary_discipline_id = payload.get("primary_discipline_id")
+        db.add(work)
+        return work
+    work = DocumentWork(
+        authority=payload["authority"],
+        identifier=payload["identifier"],
+        title=payload["title"],
+        primary_discipline_id=payload.get("primary_discipline_id"),
+    )
+    db.add(work)
+    db.flush()
+    return work
+
+
+def _upsert_edition(db: Session, work: DocumentWork, payload: dict) -> DocumentEdition:
+    publication_date = _parse_date(payload.get("publication_date"))
+    edition = (
+        db.query(DocumentEdition)
+        .filter(
+            DocumentEdition.work_id == work.id,
+            DocumentEdition.edition_label == payload["edition_label"],
+            DocumentEdition.publication_date == publication_date,
+        )
+        .first()
+    )
+    if edition:
+        edition.status = payload.get("status", edition.status)
+        edition.source_canonical_url = payload.get(
+            "source_canonical_url", edition.source_canonical_url
+        )
+        db.add(edition)
+        return edition
+    edition = DocumentEdition(
+        work_id=work.id,
+        edition_label=payload["edition_label"],
+        publication_date=publication_date,
+        status=payload.get("status", "unknown"),
+        source_canonical_url=payload.get("source_canonical_url"),
+    )
+    db.add(edition)
+    db.flush()
+    return edition
+
+
+def _upsert_source_record(
+    db: Session,
+    provider: str,
+    external_id: str,
+    payload_hash: str,
+    raw_reference: str | None,
+    work_id: int | None,
+    edition_id: int | None,
+) -> SourceRecord:
+    record = (
+        db.query(SourceRecord)
+        .filter(SourceRecord.provider == provider, SourceRecord.external_id == external_id)
+        .first()
+    )
+    if record:
+        record.payload_hash = payload_hash
+        record.raw_reference = raw_reference
+        record.work_id = work_id
+        record.edition_id = edition_id
+        db.add(record)
+        return record
+    record = SourceRecord(
+        provider=provider,
+        external_id=external_id,
+        payload_hash=payload_hash,
+        raw_reference=raw_reference,
+        work_id=work_id,
+        edition_id=edition_id,
+    )
+    db.add(record)
+    return record
