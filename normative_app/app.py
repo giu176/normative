@@ -200,41 +200,122 @@ class MainWindow(QtWidgets.QMainWindow):
         self.refresh_button = QtWidgets.QPushButton("Aggiorna elenco")
         self.export_button = QtWidgets.QPushButton("Export bibliografia (.txt)")
         self.open_file_button = QtWidgets.QPushButton("Apri file selezionato")
+        self.clear_filters_button = QtWidgets.QPushButton("Pulisci filtri")
+
+        self.search_input = QtWidgets.QLineEdit()
+        self.search_input.setPlaceholderText("Titolo, codice o ente")
+        self.category_filter = QtWidgets.QComboBox()
+        self.category_filter.addItems(["Tutte"] + CATEGORIES)
+        self.status_filter = QtWidgets.QComboBox()
+        self.status_filter.addItems(["Tutti"] + STATES)
+        self.tag_filter = QtWidgets.QLineEdit()
+        self.tag_filter.setPlaceholderText("Es. sicurezza, urbano")
+
+        self.results_label = QtWidgets.QLabel()
+        self.tabs = QtWidgets.QTabWidget()
+        self.catalog_page = QtWidgets.QWidget()
+        self.form_page = QtWidgets.QWidget()
+        self.all_rows: list[QtCore.QVariant] = []
 
         self._build_layout()
         self._connect_signals()
         self.refresh_table()
 
     def _build_layout(self) -> None:
-        content = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(content)
+        self._build_catalog_layout()
+        self._build_form_layout()
+
+        self.tabs.addTab(self.catalog_page, "Catalogo")
+        self.tabs.addTab(self.form_page, "Inserimento manuale")
+        self.setCentralWidget(self.tabs)
+
+    def _build_catalog_layout(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self.catalog_page)
+
+        filters_group = QtWidgets.QGroupBox("Filtri")
+        filters_layout = QtWidgets.QGridLayout(filters_group)
+        filters_layout.addWidget(QtWidgets.QLabel("Ricerca"), 0, 0)
+        filters_layout.addWidget(self.search_input, 0, 1)
+        filters_layout.addWidget(QtWidgets.QLabel("Categoria"), 0, 2)
+        filters_layout.addWidget(self.category_filter, 0, 3)
+        filters_layout.addWidget(QtWidgets.QLabel("Stato"), 1, 0)
+        filters_layout.addWidget(self.status_filter, 1, 1)
+        filters_layout.addWidget(QtWidgets.QLabel("Tag"), 1, 2)
+        filters_layout.addWidget(self.tag_filter, 1, 3)
+        filters_layout.addWidget(self.clear_filters_button, 0, 4, 2, 1)
+        filters_layout.setColumnStretch(1, 2)
+        filters_layout.setColumnStretch(3, 2)
 
         actions_layout = QtWidgets.QHBoxLayout()
         actions_layout.addWidget(self.refresh_button)
         actions_layout.addWidget(self.export_button)
         actions_layout.addWidget(self.open_file_button)
         actions_layout.addStretch()
+        actions_layout.addWidget(self.results_label)
 
+        layout.addWidget(filters_group)
         layout.addLayout(actions_layout)
         layout.addWidget(self.table)
+
+    def _build_form_layout(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self.form_page)
+        title = QtWidgets.QLabel("Inserisci una normativa manualmente")
+        title.setStyleSheet("font-size: 16px; font-weight: 600;")
+        layout.addWidget(title)
         layout.addWidget(self.form)
-        self.setCentralWidget(content)
+        layout.addStretch()
 
     def _connect_signals(self) -> None:
         self.form.submitted.connect(self._save_normativa)
         self.refresh_button.clicked.connect(self.refresh_table)
         self.export_button.clicked.connect(self.export_txt)
         self.open_file_button.clicked.connect(self.open_selected_file)
+        self.clear_filters_button.clicked.connect(self.clear_filters)
+        self.search_input.textChanged.connect(self.apply_filters)
+        self.category_filter.currentIndexChanged.connect(self.apply_filters)
+        self.status_filter.currentIndexChanged.connect(self.apply_filters)
+        self.tag_filter.textChanged.connect(self.apply_filters)
 
     def _save_normativa(self) -> None:
         normativa = self.form.to_normativa()
         insert_normativa(self.db_path, normativa)
         self.form.reset()
         self.refresh_table()
+        self.tabs.setCurrentWidget(self.catalog_page)
 
     def refresh_table(self) -> None:
-        rows = list(list_normative(self.db_path))
-        self.table.load(rows)
+        self.all_rows = list(list_normative(self.db_path))
+        self.apply_filters()
+
+    def apply_filters(self) -> None:
+        search_text = self.search_input.text().strip().lower()
+        tag_text = self.tag_filter.text().strip().lower()
+        category = self.category_filter.currentText()
+        status = self.status_filter.currentText()
+
+        filtered = []
+        for row in self.all_rows:
+            if category != "Tutte" and row["categoria"] != category:
+                continue
+            if status != "Tutti" and row["stato"] != status:
+                continue
+            if search_text:
+                combined = f"{row['titolo']} {row['codice']} {row['ente']}".lower()
+                if search_text not in combined:
+                    continue
+            if tag_text and tag_text not in row["tag"].lower():
+                continue
+            filtered.append(row)
+
+        self.table.load(filtered)
+        self.results_label.setText(f"Risultati: {len(filtered)}")
+
+    def clear_filters(self) -> None:
+        self.search_input.clear()
+        self.tag_filter.clear()
+        self.category_filter.setCurrentIndex(0)
+        self.status_filter.setCurrentIndex(0)
+        self.apply_filters()
 
     def export_txt(self) -> None:
         file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
