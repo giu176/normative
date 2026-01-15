@@ -872,7 +872,7 @@ def _run_ingestion_job(provider: str, run_id: int) -> None:
         try:
             for record in records:
                 normalized = provider_module.normalize(record, db=db)
-                candidate = provider_module.match_and_merge(normalized)
+                candidate = provider_module.match_and_merge(normalized, db=db)
                 work_payload = candidate["work"]
                 edition_payload = candidate["edition"]
                 external_id = candidate["external_id"]

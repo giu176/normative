@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from app.ingestion.mapping import apply_mapping
+from app.ingestion.matching import match_and_merge_candidate
 
 
 PROVIDER_NAME = "normattiva"
@@ -65,5 +66,7 @@ def normalize(record: Dict[str, Any], db: Session | None = None) -> Dict[str, An
     return apply_mapping(normalized, db=db)
 
 
-def match_and_merge(candidate: Dict[str, Any]) -> Dict[str, Any]:
-    return candidate
+def match_and_merge(
+    candidate: Dict[str, Any], db: Session | None = None
+) -> Dict[str, Any]:
+    return match_and_merge_candidate(candidate, db=db, provider=PROVIDER_NAME)
