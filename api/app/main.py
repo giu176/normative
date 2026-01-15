@@ -871,7 +871,7 @@ def _run_ingestion_job(provider: str, run_id: int) -> None:
         ingested = 0
         try:
             for record in records:
-                normalized = provider_module.normalize(record)
+                normalized = provider_module.normalize(record, db=db)
                 candidate = provider_module.match_and_merge(normalized)
                 work_payload = candidate["work"]
                 edition_payload = candidate["edition"]
@@ -980,6 +980,8 @@ def _payload_hash(payload: dict) -> str:
 
 
 def _upsert_work(db: Session, payload: dict) -> DocumentWork:
+    secondary_ids = payload.get("secondary_discipline_ids")
+    tag_ids = payload.get("tag_ids")
     work = (
         db.query(DocumentWork)
         .filter(DocumentWork.identifier == payload["identifier"])
@@ -988,8 +990,13 @@ def _upsert_work(db: Session, payload: dict) -> DocumentWork:
     if work:
         work.authority = payload["authority"]
         work.title = payload["title"]
-        work.primary_discipline_id = payload.get("primary_discipline_id")
+        if payload.get("primary_discipline_id") is not None:
+            work.primary_discipline_id = payload.get("primary_discipline_id")
         db.add(work)
+        if secondary_ids is not None:
+            _sync_work_disciplines(db, work.id, secondary_ids)
+        if tag_ids is not None:
+            _sync_work_tags(db, work.id, tag_ids)
         return work
     work = DocumentWork(
         authority=payload["authority"],
@@ -999,7 +1006,25 @@ def _upsert_work(db: Session, payload: dict) -> DocumentWork:
     )
     db.add(work)
     db.flush()
+    if secondary_ids is not None:
+        _sync_work_disciplines(db, work.id, secondary_ids)
+    if tag_ids is not None:
+        _sync_work_tags(db, work.id, tag_ids)
     return work
+
+
+def _sync_work_disciplines(
+    db: Session, work_id: int, discipline_ids: Sequence[int]
+) -> None:
+    db.query(WorkDiscipline).filter(WorkDiscipline.work_id == work_id).delete()
+    for discipline_id in discipline_ids:
+        db.add(WorkDiscipline(work_id=work_id, discipline_id=discipline_id))
+
+
+def _sync_work_tags(db: Session, work_id: int, tag_ids: Sequence[int]) -> None:
+    db.query(WorkTag).filter(WorkTag.work_id == work_id).delete()
+    for tag_id in tag_ids:
+        db.add(WorkTag(work_id=work_id, tag_id=tag_id))
 
 
 def _upsert_edition(db: Session, work: DocumentWork, payload: dict) -> DocumentEdition:
