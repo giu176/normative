@@ -14,6 +14,29 @@ Servizi:
 
 L'API espone gli endpoint principali per catalogo, list builder, export e ingestion.
 
+## Deploy di nuove versioni
+
+1. **Aggiorna il codice** sul server di deploy (git pull o copia dell'archivio).
+2. **Ricostruisci le immagini** con Docker Compose:
+
+```bash
+docker compose build --no-cache
+```
+
+3. **Riavvia i servizi** con le nuove immagini:
+
+```bash
+docker compose up -d
+```
+
+4. **Verifica lo stato**:
+
+```bash
+docker compose ps
+```
+
+Se usi volumi persistenti (PostgreSQL e allegati), i dati restano intatti tra un deploy e l'altro.
+
 ## 1) Obiettivi e principi di progetto
 
 ### Obiettivi funzionali

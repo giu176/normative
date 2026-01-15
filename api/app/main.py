@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Dict, List
+from datetime import date, datetime
+from pathlib import Path
+from typing import Dict, List, Sequence
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -23,13 +25,16 @@ from app.models import (
 )
 from app.models import Base
 from app.schemas import (
+    AttachmentOut,
     DisciplineCreate,
     DisciplineOut,
     EditionCreate,
     EditionOut,
+    EditionUpdate,
     IngestionStatus,
     ListCreate,
     ListFilters,
+    ListItemOut,
     ListItemUpdate,
     ListOut,
     ListUpdate,
@@ -39,6 +44,7 @@ from app.schemas import (
     TagOut,
     WorkCreate,
     WorkOut,
+    WorkUpdate,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -46,6 +52,8 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Standarr API")
 
 _ingestion_status = IngestionStatus()
+ATTACHMENTS_DIR = Path("/data/attachments")
+ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_db() -> Session:
@@ -97,16 +105,49 @@ def create_tag(payload: TagCreate, db: Session = Depends(get_db)) -> UserTag:
 
 @app.get("/api/works", response_model=List[WorkOut])
 def list_works(
+    query: str | None = Query(default=None),
     authority: List[str] | None = Query(default=None),
     status: List[str] | None = Query(default=None),
+    publication_date_from: date | None = Query(default=None),
+    publication_date_to: date | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
+    discipline_ids: List[int] | None = Query(default=None),
+    tag_ids: List[int] | None = Query(default=None),
+    only_latest_in_force: bool = Query(default=False),
+    has_attachment: bool | None = Query(default=None),
+    has_official_link: bool | None = Query(default=None),
+    include_related: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> List[DocumentWork]:
-    query = db.query(DocumentWork)
-    if authority:
-        query = query.filter(DocumentWork.authority.in_(authority))
-    if status:
-        query = query.join(DocumentWork.editions).filter(DocumentEdition.status.in_(status))
-    return query.all()
+    filters = ListFilters(
+        query=query,
+        authority=authority,
+        status=status,
+        publication_date_from=publication_date_from,
+        publication_date_to=publication_date_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        discipline_ids=discipline_ids,
+        tag_ids=tag_ids,
+        only_latest_in_force=only_latest_in_force,
+        has_attachment=has_attachment,
+        has_official_link=has_official_link,
+        include_related=include_related,
+    )
+    editions_query = db.query(DocumentEdition).join(DocumentWork)
+    editions_query = apply_filters(editions_query, filters)
+    editions = editions_query.all()
+    edition_ids = expand_with_related_editions(db, editions, filters.include_related)
+    if not edition_ids:
+        return []
+    return (
+        db.query(DocumentWork)
+        .join(DocumentEdition)
+        .filter(DocumentEdition.id.in_(edition_ids))
+        .distinct()
+        .all()
+    )
 
 
 @app.get("/api/works/{work_id}", response_model=WorkOut)
@@ -137,12 +178,110 @@ def create_work(payload: WorkCreate, db: Session = Depends(get_db)) -> DocumentW
     return work
 
 
+@app.patch("/api/works/{work_id}", response_model=WorkOut)
+def update_work(
+    work_id: int, payload: WorkUpdate, db: Session = Depends(get_db)
+) -> DocumentWork:
+    work = db.get(DocumentWork, work_id)
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    data = payload.model_dump(exclude_unset=True)
+    secondary_ids = data.pop("secondary_discipline_ids", None)
+    tag_ids = data.pop("tag_ids", None)
+    for key, value in data.items():
+        setattr(work, key, value)
+    if secondary_ids is not None:
+        db.query(WorkDiscipline).filter(WorkDiscipline.work_id == work_id).delete()
+        for discipline_id in secondary_ids:
+            db.add(WorkDiscipline(work_id=work_id, discipline_id=discipline_id))
+    if tag_ids is not None:
+        db.query(WorkTag).filter(WorkTag.work_id == work_id).delete()
+        for tag_id in tag_ids:
+            db.add(WorkTag(work_id=work_id, tag_id=tag_id))
+    db.commit()
+    db.refresh(work)
+    return work
+
+
+@app.delete("/api/works/{work_id}")
+def delete_work(work_id: int, db: Session = Depends(get_db)) -> dict[str, str]:
+    work = db.get(DocumentWork, work_id)
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    edition_ids = [edition.id for edition in work.editions]
+    if edition_ids:
+        db.query(LocalAttachment).filter(LocalAttachment.edition_id.in_(edition_ids)).delete()
+        db.query(EditionRelation).filter(
+            or_(
+                EditionRelation.from_edition_id.in_(edition_ids),
+                EditionRelation.to_edition_id.in_(edition_ids),
+            )
+        ).delete()
+        db.query(NormativeListItem).filter(
+            NormativeListItem.edition_id.in_(edition_ids)
+        ).delete()
+        db.query(DocumentEdition).filter(DocumentEdition.id.in_(edition_ids)).delete()
+    db.query(WorkDiscipline).filter(WorkDiscipline.work_id == work_id).delete()
+    db.query(WorkTag).filter(WorkTag.work_id == work_id).delete()
+    db.delete(work)
+    db.commit()
+    return {"status": "deleted"}
+
+
 @app.get("/api/editions/{edition_id}", response_model=EditionOut)
 def get_edition(edition_id: int, db: Session = Depends(get_db)) -> DocumentEdition:
     edition = db.get(DocumentEdition, edition_id)
     if not edition:
         raise HTTPException(status_code=404, detail="Edition not found")
     return edition
+
+
+@app.get("/api/editions", response_model=List[EditionOut])
+def list_editions(
+    query: str | None = Query(default=None),
+    work_id: int | None = Query(default=None),
+    authority: List[str] | None = Query(default=None),
+    status: List[str] | None = Query(default=None),
+    publication_date_from: date | None = Query(default=None),
+    publication_date_to: date | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
+    discipline_ids: List[int] | None = Query(default=None),
+    tag_ids: List[int] | None = Query(default=None),
+    only_latest_in_force: bool = Query(default=False),
+    has_attachment: bool | None = Query(default=None),
+    has_official_link: bool | None = Query(default=None),
+    include_related: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> List[DocumentEdition]:
+    filters = ListFilters(
+        query=query,
+        authority=authority,
+        status=status,
+        publication_date_from=publication_date_from,
+        publication_date_to=publication_date_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        discipline_ids=discipline_ids,
+        tag_ids=tag_ids,
+        only_latest_in_force=only_latest_in_force,
+        has_attachment=has_attachment,
+        has_official_link=has_official_link,
+        include_related=include_related,
+    )
+    query_set = db.query(DocumentEdition).join(DocumentWork)
+    if work_id is not None:
+        query_set = query_set.filter(DocumentEdition.work_id == work_id)
+    query_set = apply_filters(query_set, filters)
+    editions = query_set.all()
+    edition_ids = expand_with_related_editions(db, editions, filters.include_related)
+    if not edition_ids:
+        return []
+    return (
+        db.query(DocumentEdition)
+        .filter(DocumentEdition.id.in_(edition_ids))
+        .all()
+    )
 
 
 @app.post("/api/editions", response_model=EditionOut)
@@ -156,6 +295,38 @@ def create_edition(
     return edition
 
 
+@app.patch("/api/editions/{edition_id}", response_model=EditionOut)
+def update_edition(
+    edition_id: int, payload: EditionUpdate, db: Session = Depends(get_db)
+) -> DocumentEdition:
+    edition = db.get(DocumentEdition, edition_id)
+    if not edition:
+        raise HTTPException(status_code=404, detail="Edition not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(edition, key, value)
+    db.commit()
+    db.refresh(edition)
+    return edition
+
+
+@app.delete("/api/editions/{edition_id}")
+def delete_edition(edition_id: int, db: Session = Depends(get_db)) -> dict[str, str]:
+    edition = db.get(DocumentEdition, edition_id)
+    if not edition:
+        raise HTTPException(status_code=404, detail="Edition not found")
+    db.query(LocalAttachment).filter(LocalAttachment.edition_id == edition_id).delete()
+    db.query(EditionRelation).filter(
+        or_(
+            EditionRelation.from_edition_id == edition_id,
+            EditionRelation.to_edition_id == edition_id,
+        )
+    ).delete()
+    db.query(NormativeListItem).filter(NormativeListItem.edition_id == edition_id).delete()
+    db.delete(edition)
+    db.commit()
+    return {"status": "deleted"}
+
+
 @app.post("/api/relations")
 def create_relation(
     payload: RelationCreate, db: Session = Depends(get_db)
@@ -167,6 +338,15 @@ def create_relation(
 
 
 def apply_filters(query, filters: ListFilters):
+    if filters.query:
+        like_term = f"%{filters.query.strip()}%"
+        query = query.filter(
+            or_(
+                DocumentWork.title.ilike(like_term),
+                DocumentWork.identifier.ilike(like_term),
+                DocumentWork.abstract.ilike(like_term),
+            )
+        )
     if filters.authority:
         query = query.filter(DocumentWork.authority.in_(filters.authority))
     if filters.status:
@@ -175,6 +355,10 @@ def apply_filters(query, filters: ListFilters):
         query = query.filter(DocumentEdition.publication_date >= filters.publication_date_from)
     if filters.publication_date_to:
         query = query.filter(DocumentEdition.publication_date <= filters.publication_date_to)
+    if filters.updated_from:
+        query = query.filter(DocumentEdition.updated_at >= filters.updated_from)
+    if filters.updated_to:
+        query = query.filter(DocumentEdition.updated_at <= filters.updated_to)
     if filters.discipline_ids:
         query = query.outerjoin(WorkDiscipline).filter(
             or_(
@@ -212,6 +396,28 @@ def apply_filters(query, filters: ListFilters):
     return query
 
 
+def expand_with_related_editions(
+    db: Session, editions: Sequence[DocumentEdition], include_related: bool
+) -> List[int]:
+    edition_ids = {edition.id for edition in editions}
+    if not include_related or not edition_ids:
+        return list(edition_ids)
+    relations = (
+        db.query(EditionRelation)
+        .filter(
+            or_(
+                EditionRelation.from_edition_id.in_(edition_ids),
+                EditionRelation.to_edition_id.in_(edition_ids),
+            )
+        )
+        .all()
+    )
+    for relation in relations:
+        edition_ids.add(relation.from_edition_id)
+        edition_ids.add(relation.to_edition_id)
+    return list(edition_ids)
+
+
 def build_list_items(
     db: Session, list_id: int, editions: List[DocumentEdition]
 ) -> None:
@@ -244,6 +450,17 @@ def create_list(payload: ListCreate, db: Session = Depends(get_db)) -> Normative
     query = db.query(DocumentEdition).join(DocumentWork)
     query = apply_filters(query, payload.filters)
     editions = query.all()
+    edition_ids = expand_with_related_editions(
+        db, editions, payload.filters.include_related
+    )
+    if edition_ids:
+        editions = (
+            db.query(DocumentEdition)
+            .filter(DocumentEdition.id.in_(edition_ids))
+            .all()
+        )
+    else:
+        editions = []
     build_list_items(db, normative_list.id, editions)
 
     db.commit()
@@ -283,6 +500,15 @@ def regenerate_list(list_id: int, db: Session = Depends(get_db)) -> NormativeLis
     query = db.query(DocumentEdition).join(DocumentWork)
     query = apply_filters(query, filters)
     editions = query.all()
+    edition_ids = expand_with_related_editions(db, editions, filters.include_related)
+    if edition_ids:
+        editions = (
+            db.query(DocumentEdition)
+            .filter(DocumentEdition.id.in_(edition_ids))
+            .all()
+        )
+    else:
+        editions = []
 
     existing_items = (
         db.query(NormativeListItem)
@@ -290,6 +516,7 @@ def regenerate_list(list_id: int, db: Session = Depends(get_db)) -> NormativeLis
         .all()
     )
     existing_by_edition = {item.edition_id: item for item in existing_items}
+    new_edition_ids = {edition.id for edition in editions}
 
     for edition in editions:
         if edition.id in existing_by_edition:
@@ -307,15 +534,38 @@ def regenerate_list(list_id: int, db: Session = Depends(get_db)) -> NormativeLis
             )
         )
 
-    if not normative_list.preserve_overrides:
-        for item in existing_items:
-            if item.reason == "manual_exclude":
+    for item in existing_items:
+        if item.edition_id not in new_edition_ids and item.reason == "auto":
+            db.delete(item)
+            continue
+        if not normative_list.preserve_overrides and item.reason in {
+            "manual_exclude",
+            "manual_include",
+        }:
+            if item.edition_id in new_edition_ids:
                 item.included = True
                 item.reason = "auto"
+            else:
+                db.delete(item)
 
     db.commit()
     db.refresh(normative_list)
     return normative_list
+
+
+@app.get("/api/lists/{list_id}/items", response_model=List[ListItemOut])
+def list_items(list_id: int, db: Session = Depends(get_db)) -> List[NormativeListItem]:
+    normative_list = db.get(NormativeList, list_id)
+    if not normative_list:
+        raise HTTPException(status_code=404, detail="List not found")
+    return (
+        db.query(NormativeListItem)
+        .join(NormativeListItem.edition)
+        .join(DocumentEdition.work)
+        .filter(NormativeListItem.list_id == list_id)
+        .order_by(NormativeListItem.added_at)
+        .all()
+    )
 
 
 @app.post("/api/lists/{list_id}/items/{item_id}/include")
@@ -419,6 +669,17 @@ def format_export_line(item: NormativeListItem, discipline_name: str) -> str:
     )
 
 
+def calculate_sha256(payload: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(payload).hexdigest()
+
+
+def sanitize_filename(filename: str) -> str:
+    sanitized = filename.strip().replace("/", "_").replace("\\", "_")
+    return sanitized or f"attachment-{uuid4().hex}"
+
+
 @app.get("/api/lists/{list_id}/export/txt", response_class=PlainTextResponse)
 def export_list_txt(list_id: int, db: Session = Depends(get_db)) -> str:
     normative_list = db.get(NormativeList, list_id)
@@ -477,6 +738,86 @@ def export_list_txt(list_id: int, db: Session = Depends(get_db)) -> str:
         body.append("")
 
     return "\n".join(header + body)
+
+
+@app.get("/api/editions/{edition_id}/attachments", response_model=List[AttachmentOut])
+def list_attachments(
+    edition_id: int, db: Session = Depends(get_db)
+) -> List[LocalAttachment]:
+    edition = db.get(DocumentEdition, edition_id)
+    if not edition:
+        raise HTTPException(status_code=404, detail="Edition not found")
+    return (
+        db.query(LocalAttachment)
+        .filter(LocalAttachment.edition_id == edition_id)
+        .order_by(LocalAttachment.uploaded_at.desc())
+        .all()
+    )
+
+
+@app.post("/api/editions/{edition_id}/attachments", response_model=AttachmentOut)
+def upload_attachment(
+    edition_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> LocalAttachment:
+    edition = db.get(DocumentEdition, edition_id)
+    if not edition:
+        raise HTTPException(status_code=404, detail="Edition not found")
+    payload = file.file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    digest = calculate_sha256(payload)
+    existing = (
+        db.query(LocalAttachment)
+        .filter(LocalAttachment.sha256 == digest, LocalAttachment.edition_id == edition_id)
+        .first()
+    )
+    if existing:
+        return existing
+    safe_name = sanitize_filename(file.filename or "attachment.bin")
+    stored_name = f"{uuid4().hex}-{safe_name}"
+    storage_path = ATTACHMENTS_DIR / stored_name
+    storage_path.write_bytes(payload)
+    attachment = LocalAttachment(
+        edition_id=edition_id,
+        filename=safe_name,
+        mime_type=file.content_type or "application/octet-stream",
+        size_bytes=len(payload),
+        sha256=digest,
+        storage_path=str(storage_path),
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+@app.get("/api/attachments/{attachment_id}")
+def download_attachment(
+    attachment_id: int, db: Session = Depends(get_db)
+) -> FileResponse:
+    attachment = db.get(LocalAttachment, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return FileResponse(
+        attachment.storage_path,
+        media_type=attachment.mime_type,
+        filename=attachment.filename,
+    )
+
+
+@app.delete("/api/attachments/{attachment_id}")
+def delete_attachment(attachment_id: int, db: Session = Depends(get_db)) -> dict[str, str]:
+    attachment = db.get(LocalAttachment, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    storage_path = Path(attachment.storage_path)
+    if storage_path.exists():
+        storage_path.unlink()
+    db.delete(attachment)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/api/ingestion/run")
