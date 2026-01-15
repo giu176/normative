@@ -51,3 +51,12 @@ Il database viene creato nella cartella dati utente:
 
 ## Note per la versione 1
 Questa prima versione mantiene i tag come stringa separata da virgola e usa una singola tabella SQLite. Le prossime versioni potranno introdurre la normalizzazione dei tag e lo storico versioni come da blueprint.
+
+## Database centralizzato (solo metadata)
+Per creare il database centralizzato con le fonti pubbliche degli standard e normative ingegneristiche:
+
+```bash
+python -m normative_app.centralized_db
+```
+
+Il database viene salvato nella stessa cartella dati utente dell'applicazione con nome `centralized_normative.db`.
