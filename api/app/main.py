@@ -19,6 +19,7 @@ from app.models import (
     DocumentEdition,
     DocumentWork,
     EditionRelation,
+    IngestionRun,
     LocalAttachment,
     NormativeList,
     NormativeListItem,
@@ -67,7 +68,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_ingestion_status = IngestionStatus()
 ATTACHMENTS_DIR = Path("/data/attachments")
 ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -845,10 +845,14 @@ def run_ingestion(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    since = _ingestion_status.last_run_at
-    _ingestion_status.last_run_at = datetime.utcnow()
-    _ingestion_status.last_provider = provider
-    _ingestion_status.status = "running"
+    previous_run = (
+        db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).first()
+    )
+    since = previous_run.started_at if previous_run else None
+    run = IngestionRun(provider=provider, status="running", started_at=datetime.utcnow())
+    db.add(run)
+    db.commit()
+    db.refresh(run)
 
     records = provider_module.fetch_changes(since)
     ingested = 0
@@ -911,18 +915,33 @@ def run_ingestion(
                 )
             ingested += 1
         db.commit()
-        _ingestion_status.status = "completed"
-    except Exception:
+        run.status = "completed"
+        run.finished_at = datetime.utcnow()
+        run.error_message = None
+        db.add(run)
+        db.commit()
+    except Exception as exc:
         db.rollback()
-        _ingestion_status.status = "failed"
+        run.status = "failed"
+        run.finished_at = datetime.utcnow()
+        run.error_message = str(exc)
+        db.add(run)
+        db.commit()
         raise
 
-    return {"status": _ingestion_status.status, "provider": provider, "ingested": ingested}
+    return {"status": run.status, "provider": provider, "ingested": ingested}
 
 
 @app.get("/api/ingestion/status", response_model=IngestionStatus)
-def ingestion_status() -> IngestionStatus:
-    return _ingestion_status
+def ingestion_status(db: Session = Depends(get_db)) -> IngestionStatus:
+    latest_run = db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).first()
+    if not latest_run:
+        return IngestionStatus()
+    return IngestionStatus(
+        last_run_at=latest_run.started_at,
+        last_provider=latest_run.provider,
+        status=latest_run.status,
+    )
 
 
 def _parse_date(value: date | str | None) -> date | None:
