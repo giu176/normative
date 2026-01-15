@@ -551,13 +551,49 @@
         <section id="admin">
           <div class="card">
             <h2>Ingestion</h2>
+            <p class="muted" style="margin-top: 4px;">
+              Seleziona una fonte suggerita oppure inserisci un provider personalizzato.
+            </p>
             <div class="grid columns-2">
               <div>
                 <label for="ingestion-provider">Provider</label>
-                <input id="ingestion-provider" type="text" placeholder="eurlex, normattiva" />
+                <input
+                  id="ingestion-provider"
+                  type="text"
+                  list="ingestion-providers"
+                  placeholder="eurlex, normattiva"
+                />
+                <datalist id="ingestion-providers">
+                  <option value="eurlex">Eur-Lex (UE)</option>
+                  <option value="normattiva">Normattiva (Italia)</option>
+                  <option value="iso">ISO</option>
+                  <option value="manual">Manuale</option>
+                </datalist>
+                <div class="muted" style="margin-top: 6px; font-size: 12px;">
+                  Suggeriti: Eur-Lex (UE), Normattiva (Italia), ISO, Manuale.
+                </div>
               </div>
               <div class="actions" style="align-self: end;">
                 <button id="ingestion-run">Esegui ingestion</button>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="grid columns-2" id="ingestion-presets">
+              <div class="pill">Eur-Lex (UE)</div>
+              <div class="actions" style="justify-content: flex-end;">
+                <button class="secondary" data-provider="eurlex">Usa provider</button>
+              </div>
+              <div class="pill">Normattiva (Italia)</div>
+              <div class="actions" style="justify-content: flex-end;">
+                <button class="secondary" data-provider="normattiva">Usa provider</button>
+              </div>
+              <div class="pill">ISO</div>
+              <div class="actions" style="justify-content: flex-end;">
+                <button class="secondary" data-provider="iso">Usa provider</button>
+              </div>
+              <div class="pill">Manuale</div>
+              <div class="actions" style="justify-content: flex-end;">
+                <button class="secondary" data-provider="manual">Usa provider</button>
               </div>
             </div>
             <div class="divider"></div>
@@ -1195,6 +1231,19 @@
         }
       }
 
+      function setupIngestionPresets() {
+        qsa("#ingestion-presets [data-provider]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const provider = button.dataset.provider;
+            qs("#ingestion-provider").value = provider;
+            setStatus(
+              qs("#ingestion-message"),
+              `Provider impostato: ${provider}. Ora puoi avviare l'ingestion.`
+            );
+          });
+        });
+      }
+
       async function addDiscipline() {
         const code = qs("#discipline-code").value.trim();
         const name = qs("#discipline-name").value.trim();
@@ -1268,6 +1317,7 @@
         qs("#manual-add").addEventListener("click", manualAdd);
         qs("#list-regenerate").addEventListener("click", regenerateList);
         qs("#ingestion-run").addEventListener("click", runIngestion);
+        setupIngestionPresets();
         qs("#discipline-add").addEventListener("click", addDiscipline);
         qs("#tag-add").addEventListener("click", addTag);
       }
