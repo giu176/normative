@@ -3,69 +3,1288 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Standarr - Normative Library</title>
+    <title>Standarr – Normative Library</title>
     <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --border: #e2e8f0;
+        --text: #1f2933;
+        --muted: #667085;
+        --primary: #2563eb;
+        --primary-dark: #1d4ed8;
+        --success: #16a34a;
+        --warning: #f59e0b;
+        --danger: #dc2626;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
-        font-family: "Segoe UI", sans-serif;
-        background: #f7f7fb;
         margin: 0;
-        padding: 40px;
-        color: #1f2933;
+        background: var(--bg);
+        font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+        color: var(--text);
       }
-      .card {
-        max-width: 960px;
-        margin: 0 auto;
-        background: white;
-        padding: 32px;
+
+      header {
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+        padding: 24px 40px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      header h1 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 24px;
+        padding: 24px 40px 40px;
+      }
+
+      nav {
+        background: var(--card);
+        border: 1px solid var(--border);
         border-radius: 16px;
-        box-shadow: 0 10px 30px rgba(31, 41, 51, 0.08);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: fit-content;
       }
-      h1 {
+
+      nav button {
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      nav button.active {
+        background: #eef2ff;
+        color: var(--primary-dark);
+      }
+
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      section {
+        display: none;
+      }
+
+      section.active {
+        display: block;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+      }
+
+      .card + .card {
+        margin-top: 16px;
+      }
+
+      h2 {
         margin-top: 0;
+        font-size: 20px;
       }
+
+      h3 {
+        margin-top: 0;
+        font-size: 16px;
+      }
+
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 16px;
       }
-      .panel {
-        border: 1px solid #e0e5ec;
-        border-radius: 12px;
-        padding: 16px;
-        background: #fafbff;
+
+      .grid.columns-2 {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
-      code {
+
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        font-family: inherit;
+      }
+
+      textarea {
+        min-height: 80px;
+        resize: vertical;
+      }
+
+      .checkbox-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .checkbox-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: #f1f5f9;
+        border-radius: 999px;
+        font-size: 13px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .actions button,
+      .actions a {
+        border: none;
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        background: var(--primary);
+        color: white;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .actions button.secondary,
+      .actions a.secondary {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+
+      .actions button.ghost,
+      .actions a.ghost {
+        background: transparent;
+        color: var(--primary);
+        border: 1px solid var(--primary);
+      }
+
+      .status {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
         background: #eef2ff;
-        padding: 2px 6px;
-        border-radius: 6px;
+        color: var(--primary-dark);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      th {
+        font-size: 12px;
+        text-transform: uppercase;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+
+      .table-actions button {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+
+      .tag {
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .inline {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 16px 0;
+      }
+
+      .empty {
+        padding: 20px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .info-banner {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1d4ed8;
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+      }
+
+      .status-chip {
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .status-chip.ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-chip.pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      .status-chip.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="card">
+    <header>
       <h1>Standarr – Biblioteca Normative</h1>
-      <p>
-        Questa UI è un placeholder per il MVP. Le API sono disponibili su
-        <code>http://localhost:8000</code>.
-      </p>
-      <div class="grid">
-        <div class="panel">
-          <h3>Catalogo</h3>
-          <p>CRUD su Works/Edizioni, discipline e tag.</p>
-        </div>
-        <div class="panel">
-          <h3>List Builder</h3>
-          <p>Generazione liste da filtri con override manuali.</p>
-        </div>
-        <div class="panel">
-          <h3>Export</h3>
-          <p>Esporta TXT raggruppato per discipline con regola B.</p>
-        </div>
-        <div class="panel">
-          <h3>Ingestion</h3>
-          <p>Endpoint di trigger per provider.</p>
-        </div>
-      </div>
+      <p>GUI operativa per catalogo, list builder ed ingestion basata sulle API backend.</p>
+    </header>
+
+    <div class="shell">
+      <nav>
+        <button class="active" data-section="library">Library</button>
+        <button data-section="list-builder">List Builder</button>
+        <button data-section="admin">Ingestion &amp; Admin</button>
+      </nav>
+
+      <main>
+        <section id="library" class="active">
+          <div class="card">
+            <h2>Library</h2>
+            <p class="muted">Ricerca norme, filtra per disciplina, tag e stato. Apri un work per vedere la timeline delle edizioni.</p>
+            <div class="grid columns-2">
+              <div>
+                <label for="library-query">Ricerca full-text</label>
+                <input id="library-query" type="text" placeholder="Titolo, identificativo, abstract..." />
+              </div>
+              <div>
+                <label for="library-authority">Authority (separate da virgola)</label>
+                <input id="library-authority" type="text" placeholder="ISO, UNI, EU" />
+              </div>
+              <div>
+                <label for="library-status">Status edizione (separati da virgola)</label>
+                <input id="library-status" type="text" placeholder="in_force, withdrawn" />
+              </div>
+              <div>
+                <label for="library-has-attachment">Allegato locale</label>
+                <select id="library-has-attachment">
+                  <option value="">Qualsiasi</option>
+                  <option value="true">Solo con allegato</option>
+                  <option value="false">Solo senza allegato</option>
+                </select>
+              </div>
+              <div>
+                <label for="library-has-link">Link ufficiale</label>
+                <select id="library-has-link">
+                  <option value="">Qualsiasi</option>
+                  <option value="true">Solo con link</option>
+                  <option value="false">Solo senza link</option>
+                </select>
+              </div>
+              <div>
+                <label for="library-publication-from">Pubblicazione da</label>
+                <input id="library-publication-from" type="date" />
+              </div>
+              <div>
+                <label for="library-publication-to">Pubblicazione a</label>
+                <input id="library-publication-to" type="date" />
+              </div>
+              <div>
+                <label for="library-updated-from">Aggiornato da</label>
+                <input id="library-updated-from" type="datetime-local" />
+              </div>
+              <div>
+                <label for="library-updated-to">Aggiornato a</label>
+                <input id="library-updated-to" type="datetime-local" />
+              </div>
+              <div>
+                <label>Discipline</label>
+                <div id="library-disciplines" class="checkbox-row"></div>
+              </div>
+              <div>
+                <label>Tag</label>
+                <div id="library-tags" class="checkbox-row"></div>
+              </div>
+            </div>
+            <div class="checkbox-row" style="margin-top: 12px;">
+              <label class="checkbox-pill">
+                <input type="checkbox" id="library-only-latest" />
+                Solo ultima edizione in vigore
+              </label>
+              <label class="checkbox-pill">
+                <input type="checkbox" id="library-include-related" />
+                Includi relazioni
+              </label>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+              <button id="library-search">Cerca</button>
+              <button class="secondary" id="library-reset">Reset</button>
+              <span class="pill" id="library-count">0 risultati</span>
+            </div>
+            <div class="status" id="library-status-message"></div>
+          </div>
+
+          <div class="card">
+            <h3>Risultati</h3>
+            <div id="library-results"></div>
+          </div>
+
+          <div class="card" id="work-detail" style="display: none;">
+            <h3>Dettaglio Work</h3>
+            <div id="work-detail-content"></div>
+          </div>
+        </section>
+
+        <section id="list-builder">
+          <div class="card">
+            <h2>List Builder</h2>
+            <p class="muted">Step 1: definisci i filtri. Step 2: crea la lista e gestisci override manuali. Step 3: esporta in TXT.</p>
+            <div class="grid columns-2">
+              <div>
+                <label for="list-query">Ricerca full-text</label>
+                <input id="list-query" type="text" placeholder="Titolo, identificativo, abstract..." />
+              </div>
+              <div>
+                <label for="list-authority">Authority (separate da virgola)</label>
+                <input id="list-authority" type="text" placeholder="ISO, UNI, EU" />
+              </div>
+              <div>
+                <label for="list-status">Status edizione (separati da virgola)</label>
+                <input id="list-status" type="text" placeholder="in_force" />
+              </div>
+              <div>
+                <label for="list-has-attachment">Allegato locale</label>
+                <select id="list-has-attachment">
+                  <option value="">Qualsiasi</option>
+                  <option value="true">Solo con allegato</option>
+                  <option value="false">Solo senza allegato</option>
+                </select>
+              </div>
+              <div>
+                <label for="list-has-link">Link ufficiale</label>
+                <select id="list-has-link">
+                  <option value="">Qualsiasi</option>
+                  <option value="true">Solo con link</option>
+                  <option value="false">Solo senza link</option>
+                </select>
+              </div>
+              <div>
+                <label for="list-publication-from">Pubblicazione da</label>
+                <input id="list-publication-from" type="date" />
+              </div>
+              <div>
+                <label for="list-publication-to">Pubblicazione a</label>
+                <input id="list-publication-to" type="date" />
+              </div>
+              <div>
+                <label for="list-updated-from">Aggiornato da</label>
+                <input id="list-updated-from" type="datetime-local" />
+              </div>
+              <div>
+                <label for="list-updated-to">Aggiornato a</label>
+                <input id="list-updated-to" type="datetime-local" />
+              </div>
+              <div>
+                <label>Discipline</label>
+                <div id="list-disciplines" class="checkbox-row"></div>
+              </div>
+              <div>
+                <label>Tag</label>
+                <div id="list-tags" class="checkbox-row"></div>
+              </div>
+            </div>
+            <div class="checkbox-row" style="margin-top: 12px;">
+              <label class="checkbox-pill">
+                <input type="checkbox" id="list-only-latest" checked />
+                Solo ultima edizione in vigore
+              </label>
+              <label class="checkbox-pill">
+                <input type="checkbox" id="list-include-related" />
+                Includi relazioni
+              </label>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+              <button id="list-preview">Preview conteggio</button>
+              <span class="pill" id="list-count">0 risultati</span>
+            </div>
+            <div class="status" id="list-filter-status"></div>
+          </div>
+
+          <div class="card">
+            <h3>Step 2 – Crea lista</h3>
+            <div class="grid columns-2">
+              <div>
+                <label for="list-name">Nome elenco</label>
+                <input id="list-name" type="text" placeholder="Elenco applicabile" />
+              </div>
+              <div>
+                <label for="list-regeneration">Regeneration mode</label>
+                <select id="list-regeneration">
+                  <option value="dynamic">Dynamic</option>
+                  <option value="frozen">Frozen</option>
+                </select>
+              </div>
+              <div>
+                <label for="list-description">Descrizione</label>
+                <textarea id="list-description" placeholder="Note interne"></textarea>
+              </div>
+              <div>
+                <label for="list-preserve">Preserva override manuali</label>
+                <select id="list-preserve">
+                  <option value="true">Sì</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+              <button id="list-create">Crea elenco</button>
+              <button class="secondary" id="list-regenerate">Rigenera elenco</button>
+              <a id="list-export" class="ghost" href="#">Export TXT</a>
+            </div>
+            <div class="status" id="list-create-status"></div>
+            <div class="info-banner" id="list-active" style="display: none; margin-top: 16px;"></div>
+          </div>
+
+          <div class="card">
+            <h3>Step 3 – Gestione elementi</h3>
+            <div class="grid columns-2">
+              <div>
+                <label for="manual-edition">Aggiungi manualmente (ID edizione)</label>
+                <input id="manual-edition" type="number" min="1" />
+              </div>
+              <div>
+                <label for="manual-note">Nota (opzionale)</label>
+                <input id="manual-note" type="text" placeholder="Motivazione" />
+              </div>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+              <button id="manual-add">Aggiungi manualmente</button>
+            </div>
+            <div class="status" id="manual-status"></div>
+            <div class="divider"></div>
+            <div id="list-items"></div>
+          </div>
+        </section>
+
+        <section id="admin">
+          <div class="card">
+            <h2>Ingestion</h2>
+            <div class="grid columns-2">
+              <div>
+                <label for="ingestion-provider">Provider</label>
+                <input id="ingestion-provider" type="text" placeholder="eurlex, normattiva" />
+              </div>
+              <div class="actions" style="align-self: end;">
+                <button id="ingestion-run">Esegui ingestion</button>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="inline">
+              <span class="pill">Status</span>
+              <span id="ingestion-status" class="status-chip pending">...</span>
+              <span class="muted" id="ingestion-last-run">Ultima esecuzione: -</span>
+              <span class="muted" id="ingestion-provider-label">Provider: -</span>
+            </div>
+            <div class="status" id="ingestion-message"></div>
+          </div>
+
+          <div class="card">
+            <h2>Taxonomy &amp; Tag</h2>
+            <div class="grid columns-2">
+              <div>
+                <h3>Discipline</h3>
+                <div id="discipline-list"></div>
+                <div class="divider"></div>
+                <label for="discipline-code">Codice</label>
+                <input id="discipline-code" type="text" placeholder="STR" />
+                <label for="discipline-name" style="margin-top: 10px;">Nome</label>
+                <input id="discipline-name" type="text" placeholder="Strutture" />
+                <label for="discipline-order" style="margin-top: 10px;">Ordine</label>
+                <input id="discipline-order" type="number" value="0" />
+                <div class="actions" style="margin-top: 12px;">
+                  <button id="discipline-add">Aggiungi disciplina</button>
+                </div>
+                <div class="status" id="discipline-status"></div>
+              </div>
+              <div>
+                <h3>Tag</h3>
+                <div id="tag-list"></div>
+                <div class="divider"></div>
+                <label for="tag-name">Nuovo tag</label>
+                <input id="tag-name" type="text" placeholder="GDPR" />
+                <div class="actions" style="margin-top: 12px;">
+                  <button id="tag-add">Aggiungi tag</button>
+                </div>
+                <div class="status" id="tag-status"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
+
+    <script>
+      const API_BASE = "http://localhost:8000";
+
+      const state = {
+        disciplines: [],
+        tags: [],
+        currentListId: null,
+      };
+
+      const qs = (selector) => document.querySelector(selector);
+      const qsa = (selector) => Array.from(document.querySelectorAll(selector));
+
+      function setStatus(target, message) {
+        if (!target) return;
+        target.textContent = message;
+      }
+
+      function showStatusChip(target, status) {
+        if (!target) return;
+        target.classList.remove("ok", "pending", "error");
+        if (status === "ok") target.classList.add("ok");
+        else if (status === "error") target.classList.add("error");
+        else target.classList.add("pending");
+        target.textContent = status;
+      }
+
+      async function fetchJSON(path, options = {}) {
+        const response = await fetch(`${API_BASE}${path}`, {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          ...options,
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Errore API");
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      }
+
+      function buildQuery(params) {
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value === undefined || value === null || value === "") return;
+          if (Array.isArray(value) && value.length === 0) return;
+          if (Array.isArray(value)) {
+            value.forEach((item) => query.append(key, item));
+          } else {
+            query.set(key, value);
+          }
+        });
+        const queryString = query.toString();
+        return queryString ? `?${queryString}` : "";
+      }
+
+      function parseCSV(input) {
+        if (!input) return [];
+        return input
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function parseCheckboxValues(container) {
+        return Array.from(container.querySelectorAll("input:checked")).map((input) =>
+          Number(input.value)
+        );
+      }
+
+      function parseDateTime(value) {
+        if (!value) return null;
+        return new Date(value).toISOString();
+      }
+
+      function buildFilters(prefix) {
+        const get = (id) => qs(`#${prefix}-${id}`);
+        const filters = {
+          query: get("query").value || null,
+          authority: parseCSV(get("authority").value),
+          status: parseCSV(get("status").value),
+          publication_date_from: get("publication-from").value || null,
+          publication_date_to: get("publication-to").value || null,
+          updated_from: parseDateTime(get("updated-from").value),
+          updated_to: parseDateTime(get("updated-to").value),
+          discipline_ids: parseCheckboxValues(get("disciplines")),
+          tag_ids: parseCheckboxValues(get("tags")),
+          only_latest_in_force: get("only-latest").checked,
+          include_related: get("include-related").checked,
+        };
+        const hasAttachment = get("has-attachment").value;
+        const hasLink = get("has-link").value;
+        filters.has_attachment = hasAttachment === "" ? null : hasAttachment === "true";
+        filters.has_official_link = hasLink === "" ? null : hasLink === "true";
+        return filters;
+      }
+
+      function renderCheckboxes(container, items, labelKey = "name") {
+        container.innerHTML = "";
+        items.forEach((item) => {
+          const label = document.createElement("label");
+          label.className = "checkbox-pill";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.value = item.id;
+          const span = document.createElement("span");
+          span.textContent = item[labelKey];
+          label.appendChild(input);
+          label.appendChild(span);
+          container.appendChild(label);
+        });
+      }
+
+      async function loadTaxonomy() {
+        state.disciplines = await fetchJSON("/api/disciplines");
+        state.tags = await fetchJSON("/api/tags");
+        renderCheckboxes(qs("#library-disciplines"), state.disciplines);
+        renderCheckboxes(qs("#library-tags"), state.tags);
+        renderCheckboxes(qs("#list-disciplines"), state.disciplines);
+        renderCheckboxes(qs("#list-tags"), state.tags);
+        renderDisciplineList();
+        renderTagList();
+      }
+
+      function renderDisciplineList() {
+        const container = qs("#discipline-list");
+        if (!state.disciplines.length) {
+          container.innerHTML = '<div class="empty">Nessuna disciplina</div>';
+          return;
+        }
+        container.innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Codice</th><th>Nome</th><th>Ordine</th></tr>
+            </thead>
+            <tbody>
+              ${state.disciplines
+                .map(
+                  (discipline) => `
+                  <tr>
+                    <td>${discipline.code}</td>
+                    <td>${discipline.name}</td>
+                    <td>${discipline.sort_order}</td>
+                  </tr>
+                `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function renderTagList() {
+        const container = qs("#tag-list");
+        if (!state.tags.length) {
+          container.innerHTML = '<div class="empty">Nessun tag</div>';
+          return;
+        }
+        container.innerHTML = `
+          <div class="inline">
+            ${state.tags.map((tag) => `<span class="tag">${tag.name}</span>`).join("")}
+          </div>
+        `;
+      }
+
+      function disciplineName(id) {
+        return state.disciplines.find((discipline) => discipline.id === id)?.name || "-";
+      }
+
+      async function searchLibrary() {
+        const statusMessage = qs("#library-status-message");
+        setStatus(statusMessage, "Caricamento risultati...");
+        try {
+          const filters = buildFilters("library");
+          const workPromise = fetchJSON(`/api/works${buildQuery(filters)}`);
+          const editionPromise = fetchJSON(`/api/editions${buildQuery(filters)}`);
+          const [works, editions] = await Promise.all([workPromise, editionPromise]);
+
+          const editionsByWork = editions.reduce((acc, edition) => {
+            acc[edition.work_id] = acc[edition.work_id] || [];
+            acc[edition.work_id].push(edition);
+            return acc;
+          }, {});
+
+          const rows = works.map((work) => {
+            const workEditions = editionsByWork[work.id] || [];
+            const latest = workEditions
+              .slice()
+              .sort((a, b) =>
+                new Date(b.publication_date || b.updated_at) -
+                new Date(a.publication_date || a.updated_at)
+              )[0];
+            return {
+              work,
+              latest,
+            };
+          });
+
+          qs("#library-count").textContent = `${rows.length} risultati`;
+          renderLibraryResults(rows);
+          setStatus(statusMessage, "");
+        } catch (error) {
+          setStatus(statusMessage, error.message);
+        }
+      }
+
+      function renderLibraryResults(rows) {
+        const container = qs("#library-results");
+        if (!rows.length) {
+          container.innerHTML = '<div class="empty">Nessun risultato trovato.</div>';
+          return;
+        }
+        container.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>Identifier</th>
+                <th>Titolo</th>
+                <th>Authority</th>
+                <th>Status</th>
+                <th>Disciplina primaria</th>
+                <th>Ultima edizione</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (row) => `
+                  <tr>
+                    <td><strong>${row.work.identifier}</strong></td>
+                    <td>${row.work.title}</td>
+                    <td>${row.work.authority}</td>
+                    <td>${row.latest ? row.latest.status : "-"}</td>
+                    <td>${disciplineName(row.work.primary_discipline_id)}</td>
+                    <td>${row.latest?.publication_date || "-"}</td>
+                    <td class="table-actions">
+                      <button class="secondary" data-work-id="${row.work.id}">Apri</button>
+                    </td>
+                  </tr>
+                `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+
+        container.querySelectorAll("button[data-work-id]").forEach((button) => {
+          button.addEventListener("click", () => loadWorkDetail(button.dataset.workId));
+        });
+      }
+
+      async function loadWorkDetail(workId) {
+        const container = qs("#work-detail");
+        const content = qs("#work-detail-content");
+        container.style.display = "block";
+        content.innerHTML = '<div class="empty">Caricamento...</div>';
+        try {
+          const work = await fetchJSON(`/api/works/${workId}`);
+          const editions = await fetchJSON(`/api/editions${buildQuery({ work_id: workId })}`);
+          content.innerHTML = `
+            <div class="grid columns-2">
+              <div>
+                <h3>${work.identifier}</h3>
+                <p class="muted">${work.title}</p>
+                <p><strong>Authority:</strong> ${work.authority}</p>
+                <p><strong>Disciplina primaria:</strong> ${disciplineName(
+                  work.primary_discipline_id
+                )}</p>
+              </div>
+              <div>
+                <p class="muted">${work.abstract || "Nessun abstract disponibile."}</p>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <h4>Timeline edizioni</h4>
+            ${renderEditionTable(editions)}
+            <div id="attachment-panel" style="margin-top: 16px;"></div>
+          `;
+
+          content.querySelectorAll("button[data-edition-id]").forEach((button) => {
+            button.addEventListener("click", () => loadAttachments(button.dataset.editionId));
+          });
+        } catch (error) {
+          content.innerHTML = `<div class="empty">${error.message}</div>`;
+        }
+      }
+
+      function renderEditionTable(editions) {
+        if (!editions.length) {
+          return '<div class="empty">Nessuna edizione disponibile.</div>';
+        }
+        return `
+          <table>
+            <thead>
+              <tr>
+                <th>Edizione</th>
+                <th>Status</th>
+                <th>Pubblicazione</th>
+                <th>Link ufficiale</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${editions
+                .map(
+                  (edition) => `
+                  <tr>
+                    <td>${edition.edition_label}</td>
+                    <td>${edition.status}</td>
+                    <td>${edition.publication_date || "-"}</td>
+                    <td>
+                      ${
+                        edition.source_canonical_url
+                          ? `<a href="${edition.source_canonical_url}" target="_blank">Apri</a>`
+                          : "-"
+                      }
+                    </td>
+                    <td>
+                      <button class="secondary" data-edition-id="${edition.id}">Allegati</button>
+                    </td>
+                  </tr>
+                `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      async function loadAttachments(editionId) {
+        const panel = qs("#attachment-panel");
+        panel.innerHTML = '<div class="empty">Caricamento allegati...</div>';
+        try {
+          const attachments = await fetchJSON(`/api/editions/${editionId}/attachments`);
+          if (!attachments.length) {
+            panel.innerHTML = '<div class="empty">Nessun allegato disponibile.</div>';
+            return;
+          }
+          panel.innerHTML = `
+            <h4>Allegati per edizione ${editionId}</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome file</th>
+                  <th>Tipo</th>
+                  <th>Dimensione</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${attachments
+                  .map(
+                    (attachment) => `
+                    <tr>
+                      <td>${attachment.filename}</td>
+                      <td>${attachment.mime_type}</td>
+                      <td>${Math.round(attachment.size_bytes / 1024)} KB</td>
+                      <td><a href="${API_BASE}/api/attachments/${attachment.id}" target="_blank">Scarica</a></td>
+                    </tr>
+                  `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `;
+        } catch (error) {
+          panel.innerHTML = `<div class="empty">${error.message}</div>`;
+        }
+      }
+
+      async function previewListCount() {
+        const statusMessage = qs("#list-filter-status");
+        setStatus(statusMessage, "Calcolo risultati...");
+        try {
+          const filters = buildFilters("list");
+          const editions = await fetchJSON(`/api/editions${buildQuery(filters)}`);
+          qs("#list-count").textContent = `${editions.length} risultati`;
+          setStatus(statusMessage, "");
+        } catch (error) {
+          setStatus(statusMessage, error.message);
+        }
+      }
+
+      async function createList() {
+        const statusMessage = qs("#list-create-status");
+        setStatus(statusMessage, "Creazione elenco...");
+        try {
+          const payload = {
+            name: qs("#list-name").value.trim() || "Elenco senza nome",
+            description: qs("#list-description").value.trim() || null,
+            regeneration_mode: qs("#list-regeneration").value,
+            preserve_overrides: qs("#list-preserve").value === "true",
+            filters: buildFilters("list"),
+          };
+          const list = await fetchJSON("/api/lists", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          state.currentListId = list.id;
+          updateListActive(list);
+          await loadListItems();
+          setStatus(statusMessage, `Elenco creato (#${list.id}).`);
+        } catch (error) {
+          setStatus(statusMessage, error.message);
+        }
+      }
+
+      function updateListActive(list) {
+        const banner = qs("#list-active");
+        if (!list) {
+          banner.style.display = "none";
+          return;
+        }
+        banner.style.display = "block";
+        banner.textContent = `Lista attiva: #${list.id} – ${list.name} (${list.regeneration_mode})`;
+        qs("#list-export").setAttribute("href", `${API_BASE}/api/lists/${list.id}/export/txt`);
+      }
+
+      async function loadListItems() {
+        const container = qs("#list-items");
+        if (!state.currentListId) {
+          container.innerHTML = '<div class="empty">Nessuna lista attiva.</div>';
+          return;
+        }
+        container.innerHTML = '<div class="empty">Caricamento lista...</div>';
+        try {
+          const items = await fetchJSON(`/api/lists/${state.currentListId}/items`);
+          if (!items.length) {
+            container.innerHTML = '<div class="empty">La lista non contiene elementi.</div>';
+            return;
+          }
+          container.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Norma</th>
+                  <th>Edizione</th>
+                  <th>Disciplina primaria</th>
+                  <th>Inclusa</th>
+                  <th>Note</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items
+                  .map(
+                    (item) => `
+                    <tr>
+                      <td>
+                        <strong>${item.edition.work.identifier}</strong><br />
+                        <span class="muted">${item.edition.work.title}</span>
+                      </td>
+                      <td>${item.edition.edition_label} (${item.edition.status})</td>
+                      <td>${disciplineName(item.primary_discipline_id_at_time)}</td>
+                      <td>
+                        <span class="pill">${item.included ? "Inclusa" : "Esclusa"}</span>
+                        <div class="muted">${item.reason}</div>
+                      </td>
+                      <td>
+                        <input type="text" value="${item.note || ""}" data-note-id="${
+                      item.id
+                    }" placeholder="Nota" />
+                      </td>
+                      <td class="table-actions">
+                        <button class="secondary" data-toggle-id="${item.id}" data-included="${
+                      item.included
+                    }">${item.included ? "Escludi" : "Includi"}</button>
+                        <button class="ghost" data-save-id="${item.id}">Salva nota</button>
+                      </td>
+                    </tr>
+                  `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `;
+
+          container.querySelectorAll("button[data-toggle-id]").forEach((button) => {
+            button.addEventListener("click", () => toggleListItem(button.dataset.toggleId, button.dataset.included));
+          });
+          container.querySelectorAll("button[data-save-id]").forEach((button) => {
+            button.addEventListener("click", () => saveNote(button.dataset.saveId));
+          });
+        } catch (error) {
+          container.innerHTML = `<div class="empty">${error.message}</div>`;
+        }
+      }
+
+      async function toggleListItem(itemId, currentlyIncluded) {
+        if (!state.currentListId) return;
+        const status = currentlyIncluded === "true" ? "exclude" : "include";
+        try {
+          await fetchJSON(`/api/lists/${state.currentListId}/items/${itemId}/${status}`, {
+            method: "POST",
+          });
+          await loadListItems();
+        } catch (error) {
+          setStatus(qs("#manual-status"), error.message);
+        }
+      }
+
+      async function saveNote(itemId) {
+        if (!state.currentListId) return;
+        const input = qs(`input[data-note-id="${itemId}"]`);
+        try {
+          await fetchJSON(`/api/lists/${state.currentListId}/items/${itemId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ note: input.value.trim() || null }),
+          });
+          setStatus(qs("#manual-status"), "Nota aggiornata.");
+        } catch (error) {
+          setStatus(qs("#manual-status"), error.message);
+        }
+      }
+
+      async function manualAdd() {
+        if (!state.currentListId) {
+          setStatus(qs("#manual-status"), "Crea prima una lista.");
+          return;
+        }
+        const editionId = Number(qs("#manual-edition").value);
+        const note = qs("#manual-note").value.trim();
+        if (!editionId) {
+          setStatus(qs("#manual-status"), "Inserisci un ID edizione valido.");
+          return;
+        }
+        try {
+          await fetchJSON(`/api/lists/${state.currentListId}/items/manual-add`, {
+            method: "POST",
+            body: JSON.stringify({ edition_id: editionId, note: note || null }),
+          });
+          qs("#manual-edition").value = "";
+          qs("#manual-note").value = "";
+          setStatus(qs("#manual-status"), "Elemento aggiunto.");
+          await loadListItems();
+        } catch (error) {
+          setStatus(qs("#manual-status"), error.message);
+        }
+      }
+
+      async function regenerateList() {
+        if (!state.currentListId) {
+          setStatus(qs("#list-create-status"), "Nessuna lista attiva.");
+          return;
+        }
+        try {
+          const list = await fetchJSON(`/api/lists/${state.currentListId}/regenerate`, {
+            method: "POST",
+          });
+          updateListActive(list);
+          await loadListItems();
+          setStatus(qs("#list-create-status"), "Elenco rigenerato.");
+        } catch (error) {
+          setStatus(qs("#list-create-status"), error.message);
+        }
+      }
+
+      async function loadIngestionStatus() {
+        try {
+          const status = await fetchJSON("/api/ingestion/status");
+          qs("#ingestion-last-run").textContent = `Ultima esecuzione: ${
+            status.last_run_at || "-"
+          }`;
+          qs("#ingestion-provider-label").textContent = `Provider: ${
+            status.last_provider || "-"
+          }`;
+          showStatusChip(qs("#ingestion-status"), status.status || "idle");
+        } catch (error) {
+          setStatus(qs("#ingestion-message"), error.message);
+        }
+      }
+
+      async function runIngestion() {
+        const provider = qs("#ingestion-provider").value.trim();
+        if (!provider) {
+          setStatus(qs("#ingestion-message"), "Inserisci un provider.");
+          return;
+        }
+        try {
+          await fetchJSON(`/api/ingestion/run?provider=${encodeURIComponent(provider)}`, {
+            method: "POST",
+          });
+          setStatus(qs("#ingestion-message"), "Ingestion avviata.");
+          await loadIngestionStatus();
+        } catch (error) {
+          setStatus(qs("#ingestion-message"), error.message);
+        }
+      }
+
+      async function addDiscipline() {
+        const code = qs("#discipline-code").value.trim();
+        const name = qs("#discipline-name").value.trim();
+        const sortOrder = Number(qs("#discipline-order").value) || 0;
+        if (!code || !name) {
+          setStatus(qs("#discipline-status"), "Inserisci codice e nome.");
+          return;
+        }
+        try {
+          await fetchJSON("/api/disciplines", {
+            method: "POST",
+            body: JSON.stringify({
+              code,
+              name,
+              sort_order: sortOrder,
+              active: true,
+              version: "v1",
+            }),
+          });
+          qs("#discipline-code").value = "";
+          qs("#discipline-name").value = "";
+          setStatus(qs("#discipline-status"), "Disciplina aggiunta.");
+          await loadTaxonomy();
+        } catch (error) {
+          setStatus(qs("#discipline-status"), error.message);
+        }
+      }
+
+      async function addTag() {
+        const name = qs("#tag-name").value.trim();
+        if (!name) {
+          setStatus(qs("#tag-status"), "Inserisci un nome tag.");
+          return;
+        }
+        try {
+          await fetchJSON("/api/tags", {
+            method: "POST",
+            body: JSON.stringify({ name }),
+          });
+          qs("#tag-name").value = "";
+          setStatus(qs("#tag-status"), "Tag aggiunto.");
+          await loadTaxonomy();
+        } catch (error) {
+          setStatus(qs("#tag-status"), error.message);
+        }
+      }
+
+      function setupNavigation() {
+        qsa("nav button").forEach((button) => {
+          button.addEventListener("click", () => {
+            qsa("nav button").forEach((btn) => btn.classList.remove("active"));
+            qsa("main section").forEach((section) => section.classList.remove("active"));
+            button.classList.add("active");
+            qs(`#${button.dataset.section}`).classList.add("active");
+          });
+        });
+      }
+
+      function setupEvents() {
+        qs("#library-search").addEventListener("click", searchLibrary);
+        qs("#library-reset").addEventListener("click", () => {
+          qsa("#library input").forEach((input) => (input.value = ""));
+          qsa("#library input[type='checkbox']").forEach((input) => (input.checked = false));
+          qsa("#library select").forEach((select) => (select.value = ""));
+          qs("#work-detail").style.display = "none";
+          qs("#library-results").innerHTML = "";
+          qs("#library-count").textContent = "0 risultati";
+        });
+        qs("#list-preview").addEventListener("click", previewListCount);
+        qs("#list-create").addEventListener("click", createList);
+        qs("#manual-add").addEventListener("click", manualAdd);
+        qs("#list-regenerate").addEventListener("click", regenerateList);
+        qs("#ingestion-run").addEventListener("click", runIngestion);
+        qs("#discipline-add").addEventListener("click", addDiscipline);
+        qs("#tag-add").addEventListener("click", addTag);
+      }
+
+      async function init() {
+        setupNavigation();
+        setupEvents();
+        try {
+          await loadTaxonomy();
+        } catch (error) {
+          setStatus(qs("#library-status-message"), error.message);
+        }
+        await loadIngestionStatus();
+        await searchLibrary();
+      }
+
+      init();
+    </script>
   </body>
 </html>
