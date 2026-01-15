@@ -6,6 +6,11 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from normative_app.centralized_db import (
+    get_centralized_db_path,
+    init_centralized_db,
+    list_centralized_normative,
+)
 from normative_app.db import Normativa, init_db, insert_normativa, list_normative
 
 
@@ -238,16 +243,67 @@ class NormativaTable(QtWidgets.QTableWidget):
                 self.setItem(row_position, col, item)
 
 
+class CentralizedNormativeTable(QtWidgets.QTableWidget):
+    def __init__(self) -> None:
+        super().__init__(0, 10)
+        self.setHorizontalHeaderLabels(
+            [
+                "Titolo",
+                "Ente",
+                "Codice",
+                "Categoria",
+                "Paese",
+                "Pubblicazione",
+                "Ultimo aggiornamento",
+                "Fonte",
+                "URL",
+                "Note",
+            ]
+        )
+        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+
+    def load(self, rows: list[QtCore.QVariant]) -> None:
+        self.setRowCount(0)
+        for row in rows:
+            row_position = self.rowCount()
+            self.insertRow(row_position)
+            fonte_label = row["fonte_nome"] or ""
+            if row["fonte_ente"]:
+                fonte_label = f"{fonte_label} ({row['fonte_ente']})"
+            values = [
+                row["titolo"],
+                row["ente"],
+                row["codice"],
+                row["categoria"],
+                row["paese"],
+                row["data_pubblicazione"],
+                row["data_ultimo_aggiornamento"],
+                fonte_label,
+                row["url"],
+                row["note"],
+            ]
+            for col, value in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(str(value))
+                if col in {8, 9}:
+                    item.setToolTip(str(value))
+                self.setItem(row_position, col, item)
+
+
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, centralized_db_path: Path) -> None:
         super().__init__()
         self.db_path = db_path
+        self.centralized_db_path = centralized_db_path
         self.setWindowTitle("Catalogo Normative")
         self.resize(1100, 700)
 
         self.form = NormativaForm()
         self.table = NormativaTable()
+        self.centralized_table = CentralizedNormativeTable()
         self.refresh_button = QtWidgets.QPushButton("Aggiorna elenco")
+        self.centralized_refresh_button = QtWidgets.QPushButton("Aggiorna elenco centralizzato")
         self.export_button = QtWidgets.QPushButton("Export bibliografia (.txt)")
         self.open_file_button = QtWidgets.QPushButton("Apri file selezionato")
         self.clear_filters_button = QtWidgets.QPushButton("Pulisci filtri")
@@ -268,20 +324,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tag_filter.setPlaceholderText("Es. sicurezza, urbano")
 
         self.results_label = QtWidgets.QLabel()
+        self.centralized_results_label = QtWidgets.QLabel()
         self.tabs = QtWidgets.QTabWidget()
         self.catalog_page = QtWidgets.QWidget()
         self.form_page = QtWidgets.QWidget()
+        self.centralized_page = QtWidgets.QWidget()
         self.all_rows: list[QtCore.QVariant] = []
+        self.centralized_rows: list[QtCore.QVariant] = []
 
         self._build_layout()
         self._connect_signals()
         self.refresh_table()
+        self.refresh_centralized_table()
 
     def _build_layout(self) -> None:
         self._build_catalog_layout()
+        self._build_centralized_layout()
         self._build_form_layout()
 
         self.tabs.addTab(self.catalog_page, "Catalogo")
+        self.tabs.addTab(self.centralized_page, "Database centralizzato")
         self.tabs.addTab(self.form_page, "Inserimento manuale")
         self.setCentralWidget(self.tabs)
 
@@ -327,9 +389,24 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.form)
         layout.addStretch()
 
+    def _build_centralized_layout(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self.centralized_page)
+        title = QtWidgets.QLabel("Database centralizzato delle normative")
+        title.setStyleSheet("font-size: 16px; font-weight: 600;")
+
+        actions_layout = QtWidgets.QHBoxLayout()
+        actions_layout.addWidget(self.centralized_refresh_button)
+        actions_layout.addStretch()
+        actions_layout.addWidget(self.centralized_results_label)
+
+        layout.addWidget(title)
+        layout.addLayout(actions_layout)
+        layout.addWidget(self.centralized_table)
+
     def _connect_signals(self) -> None:
         self.form.submitted.connect(self._save_normativa)
         self.refresh_button.clicked.connect(self.refresh_table)
+        self.centralized_refresh_button.clicked.connect(self.refresh_centralized_table)
         self.export_button.clicked.connect(self.export_txt)
         self.open_file_button.clicked.connect(self.open_selected_file)
         self.clear_filters_button.clicked.connect(self.clear_filters)
@@ -351,6 +428,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def refresh_table(self) -> None:
         self.all_rows = list(list_normative(self.db_path))
         self.apply_filters()
+
+    def refresh_centralized_table(self) -> None:
+        self.centralized_rows = list(list_centralized_normative(self.centralized_db_path))
+        self.centralized_table.load(self.centralized_rows)
+        self.centralized_results_label.setText(f"Risultati: {len(self.centralized_rows)}")
 
     def apply_filters(self) -> None:
         search_text = self.search_input.text().strip().lower()
@@ -437,18 +519,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
 class NormativaApp(QtWidgets.QApplication):
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, centralized_db_path: Path) -> None:
         super().__init__(sys.argv)
         self.db_path = db_path
+        self.centralized_db_path = centralized_db_path
 
     def run(self) -> int:
-        window = MainWindow(self.db_path)
+        window = MainWindow(self.db_path, self.centralized_db_path)
         window.show()
         return self.exec()
 
 
 def run() -> int:
     db_path = get_app_data_dir() / "normative.db"
+    centralized_db_path = get_centralized_db_path()
     init_db(db_path)
-    app = NormativaApp(db_path)
+    init_centralized_db(centralized_db_path)
+    app = NormativaApp(db_path, centralized_db_path)
     return app.run()

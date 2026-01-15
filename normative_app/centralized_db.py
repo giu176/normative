@@ -276,6 +276,30 @@ def init_centralized_db(db_path: Path) -> None:
         connection.commit()
 
 
+def list_centralized_normative(db_path: Path) -> list[sqlite3.Row]:
+    with get_connection(db_path) as connection:
+        return connection.execute(
+            """
+            SELECT norme_metadata.id,
+                   norme_metadata.titolo,
+                   norme_metadata.ente,
+                   norme_metadata.codice,
+                   norme_metadata.categoria,
+                   norme_metadata.paese,
+                   norme_metadata.data_pubblicazione,
+                   norme_metadata.data_ultimo_aggiornamento,
+                   norme_metadata.url,
+                   norme_metadata.note,
+                   fonti_pubbliche.nome AS fonte_nome,
+                   fonti_pubbliche.ente AS fonte_ente,
+                   fonti_pubbliche.url AS fonte_url
+            FROM norme_metadata
+            LEFT JOIN fonti_pubbliche ON norme_metadata.fonte_id = fonti_pubbliche.id
+            ORDER BY datetime(norme_metadata.created_at) DESC
+            """
+        ).fetchall()
+
+
 def _seed_public_sources(connection: sqlite3.Connection) -> None:
     existing = connection.execute("SELECT COUNT(1) AS total FROM fonti_pubbliche").fetchone()
     if existing and existing["total"] > 0:
