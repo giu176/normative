@@ -6,6 +6,7 @@ from typing import Dict, List, Sequence
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
@@ -50,6 +51,17 @@ from app.schemas import (
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Standarr API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _ingestion_status = IngestionStatus()
 ATTACHMENTS_DIR = Path("/data/attachments")
