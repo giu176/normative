@@ -36,6 +36,7 @@ from app.schemas import (
     EditionCreate,
     EditionOut,
     EditionUpdate,
+    IngestionRunOut,
     IngestionStatus,
     ListCreate,
     ListFilters,
@@ -854,6 +855,7 @@ def enqueue_ingestion(
 
 def _run_ingestion_job(provider: str, run_id: int) -> None:
     db = SessionLocal()
+    ingested = 0
     try:
         provider_module = get_provider(provider)
         run = db.get(IngestionRun, run_id)
@@ -868,7 +870,6 @@ def _run_ingestion_job(provider: str, run_id: int) -> None:
         since = previous_run.started_at if previous_run else None
 
         records = provider_module.fetch_changes(since)
-        ingested = 0
         try:
             for record in records:
                 normalized = provider_module.normalize(record, db=db)
@@ -931,6 +932,7 @@ def _run_ingestion_job(provider: str, run_id: int) -> None:
             run.status = "completed"
             run.finished_at = datetime.utcnow()
             run.error_message = None
+            run.records_imported = ingested
             db.add(run)
             db.commit()
         except Exception as exc:
@@ -938,6 +940,7 @@ def _run_ingestion_job(provider: str, run_id: int) -> None:
             run.status = "failed"
             run.finished_at = datetime.utcnow()
             run.error_message = str(exc)
+            run.records_imported = ingested
             db.add(run)
             db.commit()
     finally:
@@ -963,6 +966,18 @@ def ingestion_status(db: Session = Depends(get_db)) -> IngestionStatus:
         last_run_at=latest_run.started_at,
         last_provider=latest_run.provider,
         status=latest_run.status,
+    )
+
+
+@app.get("/api/ingestion/runs", response_model=list[IngestionRunOut])
+def ingestion_runs(
+    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)
+) -> list[IngestionRun]:
+    return (
+        db.query(IngestionRun)
+        .order_by(IngestionRun.started_at.desc())
+        .limit(limit)
+        .all()
     )
 
 
