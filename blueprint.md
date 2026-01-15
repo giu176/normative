@@ -1,5 +1,14 @@
 # Blueprint
 
+## Stack tecnologico (scelta motivata)
+**Scelta:** Python + Qt (PySide6) + SQLite.
+
+**Motivazione:**
+- Distribuzione semplice in ambienti aziendali/offline con pacchetti standalone.
+- UI desktop nativa e reattiva con componenti maturi per tabelle, filtri e form.
+- SQLite è leggero, embedded e ideale per un catalogo locale con indicizzazione.
+- Python facilita scripting per import batch, validazioni e sincronizzazioni.
+
 ## Obiettivi
 - Catalogare le normative in modo strutturato e coerente.
 - Consentire l'aggiornamento delle normative nel tempo, mantenendo traccia delle versioni.
@@ -56,6 +65,70 @@ Sistema di estensione:
 - **Consultazione file locali**: apertura del file locale dal path salvato.
 - **Inserimento manuale/automatico**: creazione di record via form o import.
 - **Modifica parametri**: aggiornamento di metadati, tag, stato o percorso file.
+
+## Moduli principali
+1. **Catalogo locale (DB)**
+   - CRUD normative, categorie e tag.
+   - Ricerca full-text e filtri avanzati (categoria, tag, stato, periodo).
+   - Gestione versioni e storico.
+2. **Gestione file**
+   - Associazione file locali e apertura tramite OS.
+   - Spostamento versioni superate in `/SUP`.
+   - Verifica integrità path e presenza file.
+3. **Filtri/Tag**
+   - Gestione tassonomia: categorie predefinite e tag liberi.
+   - Suggerimenti tag e conteggi per filtro rapido.
+4. **Export .txt**
+   - Esportazione bibliografia filtrata con formattazione standard.
+5. **Ingestione**
+   - Manuale: form con validazioni obbligatorie.
+   - Batch: import CSV/Excel con mapping colonne e controlli.
+6. **Update online**
+   - Sincronizzazione metadati e confronto versioni.
+   - Log aggiornamenti e notifiche.
+
+## Database locale (SQLite)
+**Tabelle principali:**
+- **normative**
+  - `id` (PK), `titolo`, `ente`, `codice`, `data_pubblicazione`,
+    `categoria_id` (FK), `stato`, `note`, `created_at`, `updated_at`.
+- **categorie**
+  - `id` (PK), `nome`, `descrizione`.
+- **tag**
+  - `id` (PK), `nome` (unique).
+- **normativa_tag**
+  - `normativa_id` (FK), `tag_id` (FK), PK composta.
+- **versioni**
+  - `id` (PK), `normativa_id` (FK), `versione`,
+    `data_pubblicazione`, `file_path_id` (FK), `is_corrente`.
+- **file_path**
+  - `id` (PK), `path_assoluto`, `hash`, `dimensione`, `created_at`.
+
+**Indici suggeriti:**
+- `normative(categoria_id, stato)`
+- `tag(nome)`
+- `versioni(normativa_id, is_corrente)`
+- `file_path(path_assoluto)`
+
+## Flusso offline (locale)
+1. **Caricamento locale**: l'utente seleziona file o importa batch.
+2. **Validazione**: controlli su campi obbligatori e formato date.
+3. **Tagging**: assegnazione tag e categoria.
+4. **Ricerca/filtri**: query locali su DB indicizzato.
+5. **Apertura file**: apertura con l'app di default del sistema operativo.
+
+## Flusso online (aggiornamenti)
+1. **Pull aggiornamenti**: sync periodica da fonte online configurata.
+2. **Confronto versioni**: confronto `versione`/`data_pubblicazione`.
+3. **Gestione superati**: spostamento file obsoleti in `/SUP`.
+4. **Notifica**: avviso in UI con log dettagliato delle modifiche.
+
+## UI/UX
+- **Sidebar filtri**: categorie, tag, stato, range date.
+- **Vista elenco per categoria**: group header + count per categoria.
+- **Scheda dettaglio**: metadati, tag, versioni e azioni file.
+- **Import/Export**: wizard di import e pulsante export .txt.
+- **Indicatori stato**: badge `attiva/superata`, ultima versione evidenziata.
 
 ## Gestione locale dei file
 - Directory base scelta dall'utente.
