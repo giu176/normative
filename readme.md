@@ -1,5 +1,19 @@
 # Standarr self-hosted – Blueprint completa
 
+## Avvio rapido (Docker Compose)
+
+```bash
+docker compose up --build
+```
+
+Servizi:
+
+- API: http://localhost:8000
+- UI: http://localhost:5173
+- PostgreSQL: localhost:5432 (db: standarr, user: standarr, pass: standarr)
+
+L'API espone gli endpoint principali per catalogo, list builder, export e ingestion.
+
 ## 1) Obiettivi e principi di progetto
 
 ### Obiettivi funzionali
