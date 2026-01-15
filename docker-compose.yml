@@ -21,6 +21,8 @@ services:
     build: ./api
     environment:
       DATABASE_URL: postgresql+psycopg2://standarr:standarr@postgres:5432/standarr
+    volumes:
+      - attachments_data:/data/attachments
     ports:
       - "8000:8000"
     depends_on:
@@ -36,3 +38,4 @@ services:
 
 volumes:
   postgres_data:
+  attachments_data:
