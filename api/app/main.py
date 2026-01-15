@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Sequence
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import and_, func, or_, select
@@ -836,100 +836,122 @@ def delete_attachment(attachment_id: int, db: Session = Depends(get_db)) -> dict
     return {"status": "deleted"}
 
 
-@app.post("/api/ingestion/run")
-def run_ingestion(
-    provider: str = Query(...), db: Session = Depends(get_db)
-) -> dict[str, str | int]:
+def enqueue_ingestion(
+    provider: str, background_tasks: BackgroundTasks, db: Session
+) -> int:
     try:
-        provider_module = get_provider(provider)
+        get_provider(provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    previous_run = (
-        db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).first()
-    )
-    since = previous_run.started_at if previous_run else None
     run = IngestionRun(provider=provider, status="running", started_at=datetime.utcnow())
     db.add(run)
     db.commit()
     db.refresh(run)
+    background_tasks.add_task(_run_ingestion_job, provider, run.id)
+    return run.id
 
-    records = provider_module.fetch_changes(since)
-    ingested = 0
+
+def _run_ingestion_job(provider: str, run_id: int) -> None:
+    db = SessionLocal()
     try:
-        for record in records:
-            normalized = provider_module.normalize(record)
-            candidate = provider_module.match_and_merge(normalized)
-            work_payload = candidate["work"]
-            edition_payload = candidate["edition"]
-            external_id = candidate["external_id"]
+        provider_module = get_provider(provider)
+        run = db.get(IngestionRun, run_id)
+        if not run:
+            return
+        previous_run = (
+            db.query(IngestionRun)
+            .filter(IngestionRun.id != run_id)
+            .order_by(IngestionRun.started_at.desc())
+            .first()
+        )
+        since = previous_run.started_at if previous_run else None
 
-            work = _upsert_work(db, work_payload)
-            edition = _upsert_edition(db, work, edition_payload)
+        records = provider_module.fetch_changes(since)
+        ingested = 0
+        try:
+            for record in records:
+                normalized = provider_module.normalize(record)
+                candidate = provider_module.match_and_merge(normalized)
+                work_payload = candidate["work"]
+                edition_payload = candidate["edition"]
+                external_id = candidate["external_id"]
 
-            payload_hash = _payload_hash(record)
-            raw_reference = edition_payload.get("source_canonical_url")
-            _upsert_source_record(
-                db,
-                provider=provider,
-                external_id=external_id,
-                payload_hash=payload_hash,
-                raw_reference=raw_reference,
-                work_id=work.id,
-                edition_id=edition.id,
-            )
+                work = _upsert_work(db, work_payload)
+                edition = _upsert_edition(db, work, edition_payload)
 
-            for relation in candidate.get("relations", []):
-                to_external_id = relation.get("to_external_id")
-                if not to_external_id:
-                    continue
-                target_source = (
-                    db.query(SourceRecord)
-                    .filter(
-                        SourceRecord.provider == provider,
-                        SourceRecord.external_id == to_external_id,
-                    )
-                    .first()
+                payload_hash = _payload_hash(record)
+                raw_reference = edition_payload.get("source_canonical_url")
+                _upsert_source_record(
+                    db,
+                    provider=provider,
+                    external_id=external_id,
+                    payload_hash=payload_hash,
+                    raw_reference=raw_reference,
+                    work_id=work.id,
+                    edition_id=edition.id,
                 )
-                if not target_source or not target_source.edition_id:
-                    continue
-                exists = (
-                    db.query(EditionRelation)
-                    .filter(
-                        EditionRelation.from_edition_id == edition.id,
-                        EditionRelation.to_edition_id == target_source.edition_id,
-                        EditionRelation.type == relation.get("type", "related"),
-                    )
-                    .first()
-                )
-                if exists:
-                    continue
-                db.add(
-                    EditionRelation(
-                        from_edition_id=edition.id,
-                        to_edition_id=target_source.edition_id,
-                        type=relation.get("type", "related"),
-                        confidence=relation.get("confidence", 1.0),
-                        source=relation.get("source"),
-                    )
-                )
-            ingested += 1
-        db.commit()
-        run.status = "completed"
-        run.finished_at = datetime.utcnow()
-        run.error_message = None
-        db.add(run)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        run.status = "failed"
-        run.finished_at = datetime.utcnow()
-        run.error_message = str(exc)
-        db.add(run)
-        db.commit()
-        raise
 
-    return {"status": run.status, "provider": provider, "ingested": ingested}
+                for relation in candidate.get("relations", []):
+                    to_external_id = relation.get("to_external_id")
+                    if not to_external_id:
+                        continue
+                    target_source = (
+                        db.query(SourceRecord)
+                        .filter(
+                            SourceRecord.provider == provider,
+                            SourceRecord.external_id == to_external_id,
+                        )
+                        .first()
+                    )
+                    if not target_source or not target_source.edition_id:
+                        continue
+                    exists = (
+                        db.query(EditionRelation)
+                        .filter(
+                            EditionRelation.from_edition_id == edition.id,
+                            EditionRelation.to_edition_id == target_source.edition_id,
+                            EditionRelation.type == relation.get("type", "related"),
+                        )
+                        .first()
+                    )
+                    if exists:
+                        continue
+                    db.add(
+                        EditionRelation(
+                            from_edition_id=edition.id,
+                            to_edition_id=target_source.edition_id,
+                            type=relation.get("type", "related"),
+                            confidence=relation.get("confidence", 1.0),
+                            source=relation.get("source"),
+                        )
+                    )
+                ingested += 1
+            db.commit()
+            run.status = "completed"
+            run.finished_at = datetime.utcnow()
+            run.error_message = None
+            db.add(run)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            run.status = "failed"
+            run.finished_at = datetime.utcnow()
+            run.error_message = str(exc)
+            db.add(run)
+            db.commit()
+    finally:
+        db.close()
+
+
+@app.post("/api/ingestion/run")
+def run_ingestion(
+    background_tasks: BackgroundTasks,
+    provider: str = Query(...),
+    db: Session = Depends(get_db),
+) -> dict[str, str | int]:
+    run_id = enqueue_ingestion(provider, background_tasks, db)
+    return {"status": "queued", "provider": provider, "run_id": run_id}
 
 
 @app.get("/api/ingestion/status", response_model=IngestionStatus)
